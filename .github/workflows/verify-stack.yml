@@ -49,10 +49,12 @@ jobs:
       - discover
     if: needs.discover.outputs.stacks != '[]'
     runs-on: ubuntu-latest
+
     strategy:
       fail-fast: false
       matrix:
         stack: ${{ fromJson(needs.discover.outputs.stacks) }}
+
     defaults:
       run:
         working-directory: ${{ matrix.stack }}
@@ -88,35 +90,74 @@ jobs:
           echo "Using environment:"
           cat .env.ci
 
-      - name: Validate compose file
+      - name: Prepare compose arguments
+        id: compose
+        shell: bash
         run: |
-          docker compose --env-file .env.ci config
+          COMPOSE_ARGS="-f docker-compose.yml"
 
-      - name: Start stack
+          if [ ! -f docker-compose.yml ] && [ -f compose.yml ]; then
+            COMPOSE_ARGS="-f compose.yml"
+          fi
+
+          if [ -f docker-compose.ci.yml ]; then
+            echo "Using docker-compose.ci.yml override"
+            COMPOSE_ARGS="$COMPOSE_ARGS -f docker-compose.ci.yml"
+          fi
+
+          if [ -f compose.ci.yml ]; then
+            echo "Using compose.ci.yml override"
+            COMPOSE_ARGS="$COMPOSE_ARGS -f compose.ci.yml"
+          fi
+
+          echo "compose_args=$COMPOSE_ARGS" >> "$GITHUB_OUTPUT"
+
+      - name: Validate compose file
+        shell: bash
         run: |
           docker compose \
+            ${{ steps.compose.outputs.compose_args }} \
+            --env-file .env.ci \
+            config
+
+      - name: Start stack
+        shell: bash
+        run: |
+          docker compose \
+            ${{ steps.compose.outputs.compose_args }} \
             --env-file .env.ci \
             up -d --wait
 
       - name: Check container status
         shell: bash
         run: |
-          docker compose --env-file .env.ci ps
+          docker compose \
+            ${{ steps.compose.outputs.compose_args }} \
+            --env-file .env.ci \
+            ps
 
-          FAILED=$(docker compose --env-file .env.ci ps --format json |
+          FAILED=$(
+            docker compose \
+              ${{ steps.compose.outputs.compose_args }} \
+              --env-file .env.ci \
+              ps --format json |
             jq -r '
               select(
                 .State != "running"
                 or (.Health? != null and .Health != "healthy")
               )
               | .Name
-            ')
+            '
+          )
 
           if [ -n "$FAILED" ]; then
             echo "The following containers failed:"
             echo "$FAILED"
 
-            docker compose --env-file .env.ci logs --no-color
+            docker compose \
+              ${{ steps.compose.outputs.compose_args }} \
+              --env-file .env.ci \
+              logs --no-color
 
             exit 1
           fi
@@ -133,13 +174,19 @@ jobs:
 
       - name: Show logs on failure
         if: failure()
+        shell: bash
         run: |
-          docker compose --env-file .env.ci logs --no-color
+          docker compose \
+            ${{ steps.compose.outputs.compose_args }} \
+            --env-file .env.ci \
+            logs --no-color
 
       - name: Cleanup
         if: always()
+        shell: bash
         run: |
           docker compose \
+            ${{ steps.compose.outputs.compose_args }} \
             --env-file .env.ci \
             down \
             --volumes \
