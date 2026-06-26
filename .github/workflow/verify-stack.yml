@@ -1,10 +1,13 @@
 name: Verify Compose Stacks
 
 on:
+  pull_request:
+    branches:
+      - main
+
   push:
     branches:
       - main
-  pull_request:
 
 jobs:
   discover:
