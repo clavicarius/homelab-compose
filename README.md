@@ -40,6 +40,7 @@ Each service directory should contain:
 | Service | Desc | README |
 |---------|--------|--------|
 | poly-php |portable Docker‑Entwicklungsumgebung zum gleichzeitigen Testen mehrerer PHP‑Versionen| [poly-php/README.md](poly-php/README.md) |
+| adguard | Compose-Projekt für den Betrieb von AdGuard Home im HomeLab | [adguard/README.md](adguard/README.md) |
 
 
 
